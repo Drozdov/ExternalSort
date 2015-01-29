@@ -14,17 +14,18 @@ namespace ExternalMemorySort
 		{
 			if (!pathToDirectory.EndsWith("/"))
 				pathToDirectory += "/";
+			Directory.CreateDirectory(pathToDirectory);
 			this.PathToDirectory = pathToDirectory;
 			this.MaxElementsInMemoryCount = maxElementsInMemoryCount;
 			this.Formatter = new BinaryFormatter();
 		}
 
 		private int count = 0;
-		private IFormatter Formatter { get; set; }
-		private int currentBucket = 0;
+		public IFormatter Formatter { get; set; }
+		private int currentBucket = -1;
 		private IList<T> current = new List<T>();
 
-		private void CheckCurrent()
+		private void SaveCurrent()
 		{
 			if (current.Count < MaxElementsInMemoryCount)
 				return;
@@ -36,18 +37,23 @@ namespace ExternalMemorySort
 			{
 				Formatter.Serialize(stream, element);
 			}
-			current = new List<T>();
-			currentBucket++;
 		}
 
-		private int BucketsCount { get { return (MaxElementsInMemoryCount + count + 1) / MaxElementsInMemoryCount; } }
-		private int LastBucket { get { return BucketsCount - 1; } }
+		private int BucketsCount { get; set; }
+
+		private int LastBucket { get { return ElementsInLastBucket == MaxElementsInMemoryCount ? BucketsCount : BucketsCount - 1; } }
+
 		private int ElementsInLastBucket
 		{
 			get
 			{
 				int res = count % MaxElementsInMemoryCount;
-				return res == 0 ? MaxElementsInMemoryCount : res;
+				if (res != 0)
+					return res;
+				if (MaxElementsInMemoryCount * BucketsCount == count)
+					return MaxElementsInMemoryCount;
+				else
+					return 0;
 			}
 		}
 
@@ -58,7 +64,15 @@ namespace ExternalMemorySort
 			{
 				if (currentBucket == value)
 					return;
+				if (currentBucket == BucketsCount - 1 && currentBucket >= 0)
+					SaveCurrent();
+				currentBucket = value;
 				current = new List<T>();
+				if (currentBucket >= BucketsCount)
+				{
+					BucketsCount = currentBucket + 1;
+					return;
+				}
 				Stream stream = new FileStream(PathToDirectory + "external" + currentBucket, 
 					                FileMode.Open, 
 					                FileAccess.Read, 
@@ -83,8 +97,8 @@ namespace ExternalMemorySort
 		public void Add(T item)
 		{
 			CurrentBucket = LastBucket;
-			CheckCurrent();
 			current.Add(item);
+			count++;
 		}
 
 		public void Clear()
