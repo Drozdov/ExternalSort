@@ -1,6 +1,9 @@
 ﻿using System;
 using System.Runtime.Serialization;
 using System.IO;
+using System.Runtime.Serialization.Formatters.Binary;
+using System.Collections;
+using System.Collections.Generic;
 
 namespace ExternalMemorySort
 {
@@ -8,58 +11,38 @@ namespace ExternalMemorySort
 	{
 		public static void Main (string[] args)
 		{
-			var collection = new ExternalMemoryCollection<int>("directory", 5);
-			collection.Formatter = new IntFormatter();
-			collection.Add(1);
-			collection.Add(1);
-			collection.Add(1);
-			collection.Add(1);
-			collection.Add(1);
-			collection.Add(1);
-			collection.Add(1);
-			collection.Add(1);
-			collection.Add(1);
-			collection.Add(1);
-			collection.Add(1);
-			collection.Add(1);
-			collection.Add(1);
-			collection.Add(1);
-			collection.Add(1);
-			collection.Add(1);
-			collection.Add(1);
-			collection.Add(1);
+			var rand = new Random();
+			int count = 50000000;
+			//var list = new List<int>(count);
+			var list =  new ExternalMemoryList<int>("directory", 50000000, new IntBytesGetter());
+			for (int i = 0; i < count; i++)
+			{
+				list.Add(rand.Next(10000));
+			}
+			var then = DateTime.UtcNow;
+			list.Sort();
+			var now = DateTime.UtcNow;
+			Console.WriteLine(now - then);
+			Console.ReadKey();
 		}
 
-		public class IntFormatter : IFormatter
+		public class IntBytesGetter : IBytesGetter<int>
 		{
-			public SerializationBinder Binder {
-				get;
-				set;
-			}
-
-			public StreamingContext Context {
-				get;
-				set;
-			}
-
-			public ISurrogateSelector SurrogateSelector {
-				get;
-				set;
-			}
-
-			public object Deserialize (Stream serializationStream)
+			public int BytesRequired
 			{
-				byte[] buf = new byte[4];
-				serializationStream.Read(buf, 0, 4);
-				return BitConverter.ToInt32(buf, 0);
+				get { return 4; }
 			}
 
-			public void Serialize (Stream serializationStream, object graph)
+			public byte[] GetBytes(int value)
 			{
-				int val = (int)graph;
-				var b = BitConverter.GetBytes(val);
-				serializationStream.Write(b, 0, 4);
+				return BitConverter.GetBytes(value);
+			}
+
+			public int GetValue(byte[] bytes, int startIndex)
+			{
+				return BitConverter.ToInt32(bytes, startIndex);
 			}
 		}
+
 	}
 }
