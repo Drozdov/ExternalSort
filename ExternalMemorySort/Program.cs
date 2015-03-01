@@ -12,9 +12,9 @@ namespace ExternalMemorySort
 		public static void Main (string[] args)
 		{
 			var rand = new Random();
-			int count = 50000000;
+			int count = 250000000;
 			//var list = new List<int>(count);
-			var list =  new ExternalMemoryList<int>("directory", 50000000, new IntBytesGetter());
+			var list =  new ExternalMemoryList<int>("directory", 100000000, new IntBytesGetter());
 			for (int i = 0; i < count; i++)
 			{
 				list.Add(rand.Next(10000));

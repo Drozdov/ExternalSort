@@ -3,3 +3,5 @@ ExternalMemorySort/bin/
 ExternalMemorySort/obj/
 ExternalMemorySort.v12.suo
 ExternalMemorySort/ExternalMemorySort.csproj.user
+ExternalMemoryUnitTests/bin/*
+ExternalMemoryUnitTests/obj/*
