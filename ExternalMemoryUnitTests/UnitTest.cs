@@ -49,7 +49,42 @@ namespace ExternalMemoryUnitTests
 		[TestMethod]
 		public void TestMethod2()
 		{
-			var externalMemoryList = new ExternalMemoryList<int>("dir3", 500, new IntBytesGetter());
+			var externalMemoryList = new ExternalMemoryList<int>("dir3", 350, new IntBytesGetter());
+			for (int i = 0; i < 10000; i++)
+			{
+				var rand = new Random();
+				externalMemoryList.Add(rand.Next(10000) - 5000);
+			}
+			externalMemoryList.Sort();
+			int current = -5001;
+			foreach (var element in externalMemoryList)
+			{
+				Assert.IsTrue(element >= current);
+				current = element;
+			}
+		}
+
+		[TestMethod]
+		public void TestMethod1NoGetter()
+		{
+			var externalMemoryList = new ExternalMemoryList<int>("dir4", 100);
+			var cur = 37;
+			const int step = 77;
+			const int count = 1000;
+			for (int i = 0; i < count; i++)
+			{
+				externalMemoryList.Add(cur);
+				cur = (cur + step) % count;
+			}
+			externalMemoryList.Sort();
+			for (int i = 0; i < count; i++)
+				Assert.AreEqual(externalMemoryList[i], i);
+		}
+
+		[TestMethod]
+		public void TestMethod2NoGetter()
+		{
+			var externalMemoryList = new ExternalMemoryList<int>("dir5", 350);
 			for (int i = 0; i < 10000; i++)
 			{
 				var rand = new Random();

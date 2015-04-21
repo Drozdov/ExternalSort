@@ -1,11 +1,12 @@
-﻿//#define spec
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Runtime.Serialization;
 using System.IO;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Collections;
 using System.Linq;
+using System.Runtime.InteropServices;
+using System.Text;
 
 namespace ExternalMemorySort
 {
@@ -14,17 +15,16 @@ namespace ExternalMemorySort
 		public readonly string PathToDirectory;
 		public readonly int MaxElementsInMemoryCount;
 		public readonly IBytesGetter<T> BytesGetter;
-		public ExternalMemoryList(string pathToDirectory, int maxElementsInMemoryCount, IBytesGetter<T> bytesGetter)
-		#if spec
-		modifies this
-		#endif
+		public ExternalMemoryList(string pathToDirectory, int maxElementsInMemoryCount, IBytesGetter<T> bytesGetter = null)
 		{
 			pathToDirectory += "/";
 			Directory.CreateDirectory(pathToDirectory);
 			this.PathToDirectory = pathToDirectory;
 			this.MaxElementsInMemoryCount = maxElementsInMemoryCount;
 			this.BytesGetter = bytesGetter;
-			current = new List<T>(maxElementsInMemoryCount);
+			current = new T[maxElementsInMemoryCount];
+			bytesRequired = BytesGetter != null ? BytesGetter.BytesRequired : Marshal.SizeOf(typeof(T));
+			bytes = new byte[maxElementsInMemoryCount * bytesRequired];
 		}
 
 		#region Private
@@ -34,28 +34,34 @@ namespace ExternalMemorySort
 		const string SORTED = "sorted";
 
 		private int currentBucket = -1;
-		private List<T> current;
+		private T[]current;
 		private string preamble = EXTERNAL;
+		private int currentCount;
+		private int bucketsCount;
+		private byte[] bytes;
+		private int bytesRequired;
 
 		private void SaveCurrent()
 		{
-			int newCount = current.Count;
-			var bytes = new byte[newCount * BytesGetter.BytesRequired];
-			int j = 0;
-			foreach (var element in current)
+			int newCount = currentCount;
+			if (BytesGetter != null)
 			{
-				Array.Copy(BytesGetter.GetBytes(element), 0, bytes, j, BytesGetter.BytesRequired);
-				j += BytesGetter.BytesRequired;
+				for (int i = 0, j = 0; i < currentCount; ++i, j += BytesGetter.BytesRequired)
+				{
+					Array.Copy(BytesGetter.GetBytes(current[i]), 0, bytes, j, BytesGetter.BytesRequired);
+				}
+			}
+			else
+			{
+				Buffer.BlockCopy(current, 0, bytes, 0, newCount * bytesRequired);
 			}
 			using (var stream = new BufferedStream(new FileStream(PathToDirectory + preamble + CurrentBucket, 
 				                    FileMode.Create, 
 				                    FileAccess.Write, FileShare.None)))
 			{
-				stream.Write(bytes, 0, newCount * BytesGetter.BytesRequired);
+				stream.Write(bytes, 0, newCount * bytesRequired);
 			}
 		}
-
-		private int bucketsCount;
 
 		private int LastBucket { get { return ElementsInLastBucket == MaxElementsInMemoryCount ? bucketsCount : bucketsCount - 1; } }
 
@@ -83,31 +89,49 @@ namespace ExternalMemorySort
 				if (currentBucket == bucketsCount - 1 && currentBucket >= 0)
 					SaveCurrent();
 				currentBucket = value;
-				//current = new List<T>();
-				current.Clear();
+				currentCount = 0;
 				if (currentBucket >= bucketsCount)
 				{
 					bucketsCount = currentBucket + 1;
 					return;
 				}
-				using (var enumerable = new SmallPartEnumerator(PathToDirectory + preamble + currentBucket, BytesGetter))
+				var path = PathToDirectory + preamble + currentBucket;
+				if (BytesGetter != null)
 				{
-					int size = value == LastBucket ? ElementsInLastBucket : MaxElementsInMemoryCount;
+					using (var enumerable = new SmallPartEnumerator(path, BytesGetter))
+					{
+						int size = value == LastBucket ? ElementsInLastBucket : MaxElementsInMemoryCount;
+
+						foreach (var element in enumerable)
+						{
+							AddItem(element);
+						}
+					}
+				}
+				else
+				{
+					using (var stream = new BufferedStream(new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None)))
+					{
+						int copied = stream.Read(bytes, 0, bytesRequired * MaxElementsInMemoryCount);
+						Buffer.BlockCopy(bytes, 0, current, 0, copied);
+						currentCount = copied / bytesRequired;
+					}
 					
-					foreach (var element in enumerable)
-						current.Add((T)element);
-						
 				}
 			}
+		}
+
+		private void AddItem(T item)
+		{
+			if (currentCount >= MaxElementsInMemoryCount)
+				throw new IndexOutOfRangeException("Adding to collection of not proper size");
+			current[currentCount++] = item;
 		}
 		#endregion
 
 		#region IList implementation
 		public T this [int index]
 		{
-			#if spec
-			reads this
-			#endif
 			get
 			{
 				if (index < 0 || index >= count)
@@ -141,14 +165,14 @@ namespace ExternalMemorySort
 		public void Add(T item)
 		{
 			CurrentBucket = LastBucket;
-			current.Add(item);
+			AddItem(item);
 			count++;
 		}
 
 		public void Clear()
 		{
 			count = 0;
-			current.Clear();
+			currentCount = 0;
 			currentBucket = -1;
 			bucketsCount = 0;
 		}
@@ -237,7 +261,7 @@ namespace ExternalMemorySort
 		public void Sort(int bucketId)
 		{
 			CurrentBucket = bucketId;
-			current.Sort();
+			Array.Sort(current);
 			preamble = SORTED;
 			SaveCurrent();
 			preamble = EXTERNAL;
@@ -335,14 +359,20 @@ namespace ExternalMemorySort
 			Stream stream;
 			IBytesGetter<T> bytesGetter;
 			byte[] buffer;
-			int elementsInBuffer = 100; // elements read at once
+			private T[] queue;
+			int elementsInBuffer = 256; // elements read at once
 			int left = 0;
 			int pos = 0;
+			private int bytesRequired;
+
 			internal SmallPartEnumerator(string path, IBytesGetter<T> bytesGetter)
 			{
 				this.stream = new BufferedStream(new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None));
 				this.bytesGetter = bytesGetter;
-				this.buffer = new byte[bytesGetter.BytesRequired * elementsInBuffer];
+				bytesRequired = bytesGetter != null ? bytesGetter.BytesRequired : Marshal.SizeOf(typeof(T));
+				this.buffer = new byte[bytesRequired * elementsInBuffer];
+				if (bytesGetter == null)
+					queue = new T[elementsInBuffer];
 			}
 
 			public T Current { get; private set; }
@@ -359,15 +389,36 @@ namespace ExternalMemorySort
 
 			public bool MoveNext()
 			{
+				return bytesGetter != null ? MoveNextWithGetter() : MoveNextWithoutGetter();
+			}
+
+			bool MoveNextWithGetter()
+			{
 				if (left == 0)
 				{
-					left = stream.Read(buffer, 0, buffer.Length) / bytesGetter.BytesRequired;
+					left = stream.Read(buffer, 0, buffer.Length) / bytesRequired;
 					pos = 0;
 				}
 				if (left == 0)
 					return false;
 				Current = bytesGetter.GetValue(buffer, pos);
-				pos += bytesGetter.BytesRequired;
+				pos += bytesRequired;
+				left--;
+				return true;
+			}
+
+			bool MoveNextWithoutGetter()
+			{
+				if (left == 0)
+				{
+					int read = stream.Read(buffer, 0, buffer.Length);
+					pos = 0;
+					Buffer.BlockCopy(buffer, 0, queue, 0, read);
+					left = read / bytesRequired;
+				}
+				if (left == 0)
+					return false;
+				Current = queue[pos++];
 				left--;
 				return true;
 			}
