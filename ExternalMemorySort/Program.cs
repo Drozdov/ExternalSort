@@ -12,22 +12,24 @@ namespace ExternalMemorySort
 	{
 		public static void Main (string[] args)
 		{
-			Test2();
+			Test1();
 		}
 
 		static void Test1()
 		{
 			int j = 0;
-			foreach (var count in new int[] { (int)5e7, (int)1e8, (int)2e8, (int)4e8 })
+			foreach (var count in new int[] {  (int)2e8, (int)4e8 })
 			{
+				// always produce the same pseudo-random numbers
+				m_z = 6531;
+				m_w = 1365801;
 				System.IO.StreamWriter file = new System.IO.StreamWriter("result.txt", true);
 				var before = DateTime.UtcNow;
-				var rand = new Random();
-				//var list = new List<int>(count);
-				var list = new ExternalMemoryList<int>("directory" + j++, count / 15);
+				var list = new List<uint>(count);
+				//var list = new ExternalMemoryList<uint>("directory" + j++, count / 5);
 				for (int i = 0; i < count; i++)
 				{
-					list.Add(rand.Next(10000));
+					list.Add(get_random());
 				}
 				var then = DateTime.UtcNow;
 				list.Sort();
@@ -56,14 +58,14 @@ namespace ExternalMemorySort
 		static void Test2()
 		{
 			int j = 0;
-			foreach (var k in new int[] {5, 10, 20, 50, 100, 250, 500, 1000, 2000})
-			//foreach (var k in new int[] { 50, 20, 10, 5 })
+			//foreach (var k in new int[] {5, 10, 20, 50, 100, 250, 500, 1000, 2000})
+			for (int k = 14; k <= 14; k++)
 			{
 				// always produce the same pseudo-random numbers
 				m_z = 6531;
 				m_w = 1365801;
 
-				int count = (int) 4e8;
+				int count = (int) 5e7;
 				System.IO.StreamWriter file = new System.IO.StreamWriter("result.txt", true);
 				var before = DateTime.UtcNow;
 				
