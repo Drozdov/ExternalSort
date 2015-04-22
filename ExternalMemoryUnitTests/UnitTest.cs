@@ -84,14 +84,14 @@ namespace ExternalMemoryUnitTests
 		[TestMethod]
 		public void TestMethod2NoGetter()
 		{
-			var externalMemoryList = new ExternalMemoryList<int>("dir5", 350);
+			var externalMemoryList = new ExternalMemoryList<uint>("dir5", 350);
 			for (int i = 0; i < 10000; i++)
 			{
 				var rand = new Random();
-				externalMemoryList.Add(rand.Next(10000) - 5000);
+				externalMemoryList.Add((uint)rand.Next(10000));
 			}
 			externalMemoryList.Sort();
-			int current = -5001;
+			uint current = 0;
 			foreach (var element in externalMemoryList)
 			{
 				Assert.IsTrue(element >= current);

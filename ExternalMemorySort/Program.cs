@@ -12,7 +12,7 @@ namespace ExternalMemorySort
 	{
 		public static void Main (string[] args)
 		{
-			Test1();
+			Test2();
 		}
 
 		static void Test1()
@@ -44,19 +44,33 @@ namespace ExternalMemorySort
 			}
 		}
 
+
+		static uint m_z, m_w;
+		static uint get_random()
+		{
+			m_z = 36969 * (m_z & 65535) + (m_z >> 16);
+			m_w = 18000 * (m_w & 65535) + (m_w >> 16);
+			return (m_z << 16) + m_w;  /* 32-bit result */
+		}
+
 		static void Test2()
 		{
 			int j = 0;
-			for (int k = 1; k < 15; k++)
+			foreach (var k in new int[] {5, 10, 20, 50, 100, 250, 500, 1000, 2000})
+			//foreach (var k in new int[] { 50, 20, 10, 5 })
 			{
-				int count = (int) 5e7;
+				// always produce the same pseudo-random numbers
+				m_z = 6531;
+				m_w = 1365801;
+
+				int count = (int) 4e8;
 				System.IO.StreamWriter file = new System.IO.StreamWriter("result.txt", true);
 				var before = DateTime.UtcNow;
-				var rand = new Random();
-				var list = new ExternalMemoryList<int>("directory" + j++, count / k);
+				
+				var list = new ExternalMemoryList<uint>("directory" + j++, count / k);
 				for (int i = 0; i < count; i++)
 				{
-					list.Add(rand.Next(10000));
+					list.Add(get_random());
 				}
 				var then = DateTime.UtcNow;
 				list.Sort();
