@@ -99,6 +99,41 @@ namespace ExternalMemoryUnitTests
 			}
 		}
 
+		[TestMethod]
+		public void TestKMerge()
+		{
+			var externalMemoryList = new KMerge<int>("dir6", 3, 2048);
+			var cur = 37;
+			const int step = 77;
+			const int count = 1000;
+			for (int i = 0; i < count; i++)
+			{
+				externalMemoryList.Add(cur);
+				cur = (cur + step) % count;
+			}
+			externalMemoryList.Sort();
+			for (int i = 0; i < count; i++)
+				Assert.AreEqual(externalMemoryList[i], i);
+		}
+
+		[TestMethod]
+		public void TestKMerge2()
+		{
+			var externalMemoryList = new KMerge<uint>("dir7", 5, 256);
+			for (int i = 0; i < 10000; i++)
+			{
+				var rand = new Random();
+				externalMemoryList.Add((uint)rand.Next(10000));
+			}
+			externalMemoryList.Sort();
+			uint current = 0;
+			foreach (var element in externalMemoryList)
+			{
+				Assert.IsTrue(element >= current);
+				current = element;
+			}
+		}
+
         public class IntBytesGetter : IBytesGetter<int>
         {
             public int BytesRequired

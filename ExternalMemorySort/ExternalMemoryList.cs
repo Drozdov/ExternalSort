@@ -15,7 +15,9 @@ namespace ExternalMemorySort
 		public readonly string PathToDirectory;
 		public readonly int MaxElementsInMemoryCount;
 		public readonly IBytesGetter<T> BytesGetter;
-		public ExternalMemoryList(string pathToDirectory, int maxElementsInMemoryCount, IBytesGetter<T> bytesGetter = null)
+		public bool SortOnSave;
+		public ExternalMemoryList(string pathToDirectory, int maxElementsInMemoryCount, IBytesGetter<T> bytesGetter = null,
+			bool sortOnSave = false)
 		{
 			pathToDirectory += "/";
 			Directory.CreateDirectory(pathToDirectory);
@@ -25,24 +27,27 @@ namespace ExternalMemorySort
 			current = new T[maxElementsInMemoryCount];
 			bytesRequired = BytesGetter != null ? BytesGetter.BytesRequired : Marshal.SizeOf(typeof(T));
 			bytes = new byte[maxElementsInMemoryCount * bytesRequired];
+			SortOnSave = sortOnSave;
 		}
 
-		#region Private
-		private int count = 0;
+		#region Private & Protected
+		protected int count = 0;
 
-		const string EXTERNAL = "external";
-		const string SORTED = "sorted";
+		protected const string EXTERNAL = "external";
+		protected const string SORTED = "sorted";
 
-		private int currentBucket = -1;
-		private T[]current;
-		private string preamble = EXTERNAL;
-		private int currentCount;
-		private int bucketsCount;
-		private byte[] bytes;
-		private int bytesRequired;
+		protected int currentBucket = -1;
+		protected T[] current;
+		protected string preamble = EXTERNAL;
+		protected int currentCount;
+		protected int bucketsCount;
+		protected byte[] bytes;
+		protected int bytesRequired;
 
-		private void SaveCurrent()
+		protected void SaveCurrent()
 		{
+			if (SortOnSave)
+				Array.Sort(current, 0, currentCount);
 			int newCount = currentCount;
 			if (BytesGetter != null)
 			{
@@ -87,7 +92,9 @@ namespace ExternalMemorySort
 				if (currentBucket == value)
 					return;
 				if (currentBucket == bucketsCount - 1 && currentBucket >= 0)
+				{
 					SaveCurrent();
+				}
 				currentBucket = value;
 				currentCount = 0;
 				if (currentBucket >= bucketsCount)
@@ -162,7 +169,7 @@ namespace ExternalMemorySort
 		#endregion
 
 		#region ICollection implementation
-		public void Add(T item)
+		public virtual void Add(T item)
 		{
 			CurrentBucket = LastBucket;
 			AddItem(item);
@@ -267,10 +274,14 @@ namespace ExternalMemorySort
 			preamble = EXTERNAL;
 		}
 
-		public void Sort()
+		public virtual void Sort()
 		{
-			for (int i = 0; i < bucketsCount; i++)
-				Sort(i);
+			SaveCurrent();
+			if (!SortOnSave)
+			{
+				for (int i = 0; i < bucketsCount; i++)
+					Sort(i);
+			}
 			var enumerators = new IEnumerator<T>[bucketsCount];
 			for (int i = 0; i < bucketsCount; i++)
 			{
@@ -308,8 +319,14 @@ namespace ExternalMemorySort
 				}
 			} while (argMin >= 0);
 #else
-			List<int> curOrder = new List<int>(bucketsCount);
 			Clear();
+			Merge(enumerators);
+#endif
+		}
+
+		protected void Merge(IEnumerator<T>[] enumerators)
+		{
+			List<int> curOrder = new List<int>(bucketsCount);
 			for (int i = 0; i < enumerators.Length; i++)
 			{
 				enumerators[i].MoveNext();
@@ -337,7 +354,10 @@ namespace ExternalMemorySort
 					curOrder.Remove(id);
 				}
 			}
-#endif
+			foreach (var enumerator in enumerators)
+			{
+				enumerator.Dispose();
+			}
 		}
 
 		class Comparer : IComparer<int>
@@ -354,19 +374,20 @@ namespace ExternalMemorySort
 			}
 		}
 
-		class SmallPartEnumerator : IEnumerator<T>, IEnumerable<T>
+		protected class SmallPartEnumerator : IEnumerator<T>, IEnumerable<T>
 		{
 			Stream stream;
 			IBytesGetter<T> bytesGetter;
 			byte[] buffer;
 			private T[] queue;
-			int elementsInBuffer = 256; // elements read at once
+			int elementsInBuffer; // elements read at once
 			int left = 0;
 			int pos = 0;
 			private int bytesRequired;
 
-			internal SmallPartEnumerator(string path, IBytesGetter<T> bytesGetter)
+			internal SmallPartEnumerator(string path, IBytesGetter<T> bytesGetter, int buffer = 256)
 			{
+				this.elementsInBuffer = buffer;
 				this.stream = new BufferedStream(new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None));
 				this.bytesGetter = bytesGetter;
 				bytesRequired = bytesGetter != null ? bytesGetter.BytesRequired : Marshal.SizeOf(typeof(T));
