@@ -11,12 +11,13 @@ namespace ExternalMemorySort
 {
 	class MainClass
 	{
-		enum Algo { List, External }
+		enum Algo { List, External, KMerge }
 
 		public static void Main (string[] args)
 		{
 			var j = 0;
 			var k = 5;
+			var b = 65536;
 			var algo = Algo.External;
 			var count = (int) 4e8;
 			while (j < args.Length)
@@ -25,16 +26,20 @@ namespace ExternalMemorySort
 					count = Convert.ToInt32(args[++j]);
 				else if (args[j].Equals("-k"))
 					k = Convert.ToInt32(args[++j]);
+				else if (args[j].Equals("-b"))
+					b = Convert.ToInt32(args[++j]);
 				else if (args[j].Equals("-internal"))
 					algo = Algo.List;
+				else if (args[j].Equals("-kmerge"))
+					algo = Algo.KMerge;
 				j++;
 			}
-			Test(count, k, algo);
+			Test(count, k, algo, b);
 		}
 
-		private static void Test(int count, int k, Algo algo)
+		private static void Test(int count, int k, Algo algo, int b = 65536)
 		{
-			Console.WriteLine("Test " + algo + " on " + count + " elements, k = " + k);
+			Console.WriteLine("Test " + algo + " on " + count + " elements, k = " + k + " b = " + b);
 			// always produce the same pseudo-random numbers
 			m_z = 6531;
 			m_w = 1365801;
@@ -43,10 +48,18 @@ namespace ExternalMemorySort
 			
 			IList<uint> list;
 
-			if (algo == Algo.List)
-				list = new List<uint>(count);
-			else
-				list = new ExternalMemoryList<uint>("directory", count / k);
+			switch (algo)
+			{
+				case Algo.List:
+					list = new List<uint>(count);
+					break;
+				case Algo.External:
+					list = new ExternalMemoryList<uint>("directory", count/k);
+					break;
+				default:
+					list = new KMerge<uint>("directory", k, b);
+					break;
+			}
 			for (int i = 0; i < count; i++)
 			{
 				list.Add(get_random());
